@@ -1,0 +1,112 @@
+//Install the adafruit GPS library from https://github.com/adafruit/Adafruit-GPS-Library and copied to Arduino Library folder
+
+//Load the GPS Library form the adafruit site above
+#include <Adafruit_GPS.h>
+
+//Load the Software Serial Library. This library in effect gives the arduino additional serial ports to communicate to GPS
+#include <SoftwareSerial.h> 
+
+//Initialize SoftwareSerial, and tell it that I will be connecting through pins 2 and 3
+SoftwareSerial mySerial(3, 2);
+
+//Create GPS object
+Adafruit_GPS GPS(&mySerial);
+
+//Data structure to keep GPS data.
+//The National Marine Electronics Association (NMEA) 
+//has developed a specification that defines the interface 
+//between various pieces of marine electronic equipment. 
+//GPS receiver communication is defined within this specification. 
+//Most computer programs that provide real time position information understand 
+//and expect data to be in NMEA format. This data includes the complete PVT (position, velocity, time) 
+//solution computed by the GPS receiver. The idea of NMEA is to send a line of data called a sentence 
+//that is totally self contained and independent from other sentences. 
+//More info: http://www.gpsinformation.org/dale/nmea.htm
+// I checked NMEA data using https://rl.se/gprmc
+
+String NMEA1;  //We will use this variable to hold our first NMEA sentence
+String NMEA2;  //We will use this variable to hold our second NMEA sentence
+char c;       //Used to read the characters spewing from the GPS module
+
+// Initial setup
+void setup()  
+{
+  //Serial.begin(115200);  //Turn on the Serial Monitor
+  Serial.begin(9600);  //Turn on the Serial Monitor
+  GPS.begin(9600);       //Turn GPS on at baud rate of 9600
+  GPS.sendCommand("$PGCMD,33,0*6D"); // Turn Off GPS Antenna Update. We are not intersted about this
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, other settings are 5HZ or 10HZ. 1HZ seems more stable 
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA); //Tell GPS we want only $GPRMC and $GPGGA NMEA sentences
+  delay(3000);  //Pause for 1000ms (1Sec)
+}
+
+
+// Main loop of program which will run over and over again
+void loop()
+{
+    readGPS();  //This is a function I defined below which reads two NMEA sentences from GPS
+    delay(500); //250ms after so that we can get opportunity to work on other sensor reading etc in Arduino
+}
+
+//This function will read and remember two NMEA sentences from GPS.
+// Read the 2 NEMA sentences one after after each other (no operation 
+// in between) so that in between buffer does not get jammed by more GPS data in between. 
+void readGPS(){
+
+  clearGPS();    //Serial port probably has old or corrupt data, so begin by clearing it all out
+  
+  while(!GPS.newNMEAreceived()) { //Keep reading characters in this loop until a good NMEA sentence is received
+      c=GPS.read(); //read a character from the GPS
+  }
+  GPS.parse(GPS.lastNMEA());  //Once you get a good NMEA, parse it
+  NMEA1=GPS.lastNMEA();      //Once parsed, save NMEA sentence into NMEA1
+  
+  while(!GPS.newNMEAreceived()) {  //Go out and get the second NMEA sentence, should be different type than the first one read above.
+     c=GPS.read();
+  }
+  GPS.parse(GPS.lastNMEA());
+  NMEA2=GPS.lastNMEA();
+  
+  Serial.println(NMEA1);
+  Serial.println(NMEA2);
+  Serial.print("\nTime: ");
+  Serial.print(GPS.hour, DEC); Serial.print(':');
+  Serial.print(GPS.minute, DEC); Serial.print(':');
+  Serial.print(GPS.seconds, DEC); Serial.print('.');
+  Serial.println(GPS.milliseconds);
+  Serial.print("Date: ");
+  Serial.print(GPS.day, DEC); Serial.print('/');
+  Serial.print(GPS.month, DEC); Serial.print("/20");
+  Serial.println(GPS.year, DEC);
+  Serial.print("Fix: "); Serial.print((int)GPS.fix);
+  Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+  if (GPS.fix) {
+      Serial.print("Location: ");
+      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
+      Serial.print(", ");
+      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
+      Serial.print("Location (in degrees, works with Google Maps (-ve means S or W)): ");
+      Serial.print(GPS.latitudeDegrees, 4);
+      Serial.print(", ");
+      Serial.println(GPS.longitudeDegrees, 4);
+      Serial.print("Speed (knots): "); Serial.println(GPS.speed);
+      Serial.print("Angle: "); Serial.println(GPS.angle);
+      Serial.print("Altitude: "); Serial.println(GPS.altitude);
+      Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+  }
+  Serial.println("");
+}
+
+
+//Since between GPS reads, we still have data streaming in, 
+//we need to clear the old data by reading a few sentences, and discarding these
+void clearGPS() {
+  while(!GPS.newNMEAreceived()) {
+     c=GPS.read();
+  }
+  GPS.parse(GPS.lastNMEA());
+  while(!GPS.newNMEAreceived()) {
+     c=GPS.read();
+  }
+  GPS.parse(GPS.lastNMEA());
+}
